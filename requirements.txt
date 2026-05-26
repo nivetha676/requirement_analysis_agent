@@ -1,0 +1,4 @@
+The system shall support Apple CarPlay and Android Auto via both wired (USB) and wireless connections.
+Bluetooth 5.0 or higher shall be supported for hands-free calling and audio streaming.
+The system shall support simultaneous pairing of up to 5 Bluetooth devices with automatic reconnection to the last active device.
+Wi-Fi hotspot capability (4G/5G) shall be available as a built-in or tethered option.
