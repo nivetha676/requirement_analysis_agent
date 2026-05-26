@@ -1,3 +1,5 @@
 ollama pull llama3.2
 
 python -m venv venv
+
+python requirement_analysis_agent.py --file requirements.txt
