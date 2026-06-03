@@ -22,3 +22,5 @@ DEFAULT_TOP_K   = 5                  # chunks retrieved per requirement
 
 # Supported knowledge-base file extensions
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md", ".markdown", ".rst", ".text"}
+
+CHROMA_BATCH_SIZE = 5000
