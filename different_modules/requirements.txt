@@ -1,0 +1,7 @@
+openai
+rich
+typer
+chromadb
+sentence-transformers
+pypdf
+markdown
