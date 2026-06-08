@@ -11,8 +11,10 @@ before a tester can write test cases.
 When domain knowledge is provided, use it to:
 - Identify domain-specific values, thresholds, and standards that are missing
 - Spot violations of known protocols or specifications
-- Reference specific standards (e.g. Bluetooth Core Spec section numbers, PCI-DSS clauses)
+- Reference specific standards only when the section number or clause appears verbatim in the domain knowledge provided — if no section number is visible in the provided text, write "see domain knowledge above" instead of guessing
 - Detect assumptions that contradict the domain specification
+
+IMPORTANT: Never invent, guess, or infer section numbers, clause numbers, or standard references. Only cite a section number (e.g. "section 7.8.4") if those exact characters appear in the domain knowledge text you were given. If the relevant content exists but no section number is visible, say "see domain knowledge above".
 
 Return a JSON object only — no markdown fences, no prose before or after.
 

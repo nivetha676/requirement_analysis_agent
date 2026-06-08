@@ -9,11 +9,13 @@
 # Then run the agent:
 #   python main.py -f reqs.txt --kb bluetooth
 #   python main.py -f reqs.txt --kb bluetooth --pdf report.pdf
+#   → saves as:  report_20260608_143022.pdf
 # ─────────────────────────────────────────────────────────────
 
 import json
 import typer
 from pathlib import Path
+from datetime import datetime
 
 from rich.console import Console
 from rich.table import Table
@@ -34,6 +36,26 @@ SAMPLE_REQUIREMENTS = """\
 3. Bluetooth pairing must be secure
 4. The system must handle multiple Bluetooth connections
 5. Users should receive a notification when a Bluetooth device is out of range"""
+
+
+# ── Helpers ───────────────────────────────────────────────────
+
+def _stamp() -> str:
+    """Return current datetime as a filename-safe string: 20260608_143022"""
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def _with_timestamp(path: Path) -> Path:
+    """
+    Insert a timestamp before the file extension.
+    report.pdf      → report_20260608_143022.pdf
+    report.json     → report_20260608_143022.json
+    report          → report_20260608_143022
+    """
+    ts   = _stamp()
+    stem = path.stem
+    ext  = path.suffix   # includes the dot, e.g. ".pdf"
+    return path.with_name(f"{stem}_{ts}{ext}")
 
 
 # ── CLI ───────────────────────────────────────────────────────
@@ -58,11 +80,11 @@ def main(
     ),
     output: Path = typer.Option(
         None, "--output", "-o",
-        help="Save JSON report to this path.",
+        help="Save JSON report to this path. Timestamp is appended automatically.",
     ),
     pdf: Path = typer.Option(
         None, "--pdf", "-p",
-        help="Save PDF report to this path. e.g. --pdf report.pdf",
+        help="Save PDF report to this path. Timestamp is appended automatically.",
     ),
     interactive: bool = typer.Option(
         False, "--interactive", "-i",
@@ -82,7 +104,8 @@ def main(
 
     Then run the agent:\n
         python main.py -f reqs.txt --kb bluetooth\n
-        python main.py -f reqs.txt --kb bluetooth --pdf report.pdf
+        python main.py -f reqs.txt --kb bluetooth --pdf report.pdf\n
+        → saves as report_20260608_143022.pdf
     """
 
     console.rule("[bold]Requirements Ambiguity Analysis Agent[/bold]")
@@ -97,10 +120,10 @@ def main(
             )
         else:
             table = Table(box=box.ROUNDED, title="[bold]Available Knowledge Bases[/bold]")
-            table.add_column("Name",        style="bold cyan")
-            table.add_column("Chunks",      justify="right")
-            table.add_column("Sources",     justify="right")
-            table.add_column("Created",     style="dim")
+            table.add_column("Name",    style="bold cyan")
+            table.add_column("Chunks",  justify="right")
+            table.add_column("Sources", justify="right")
+            table.add_column("Created", style="dim")
             for m in metas:
                 table.add_row(
                     m["name"],
@@ -170,20 +193,20 @@ def main(
 
     # ── Save JSON ─────────────────────────────────────────────
     if output:
-        clean = [{k: v for k, v in r.items() if not k.startswith("_")} for r in results]
-        output.write_text(json.dumps(clean, indent=2, ensure_ascii=False), encoding="utf-8")
-        console.print(f"[green]✓ JSON report saved to:[/green] {output}\n")
+        # Ensure .json extension, then stamp
+        json_path = output if output.suffix.lower() == ".json" else output.with_suffix(".json")
+        json_path = _with_timestamp(json_path)
+        clean     = [{k: v for k, v in r.items() if not k.startswith("_")} for r in results]
+        json_path.write_text(json.dumps(clean, indent=2, ensure_ascii=False), encoding="utf-8")
+        console.print(f"[green]✓ JSON report saved to:[/green] {json_path}\n")
 
     # ── Save PDF ──────────────────────────────────────────────
     if pdf:
-        # Ensure .pdf extension
+        # Ensure .pdf extension, then stamp
         pdf_path = pdf if pdf.suffix.lower() == ".pdf" else pdf.with_suffix(".pdf")
-        with console.status(f"[bold green]Generating PDF report...[/bold green]", spinner="dots"):
-            save_pdf(
-                results,
-                output_path=pdf_path,
-                kb_name=kb,
-            )
+        pdf_path = _with_timestamp(pdf_path)
+        with console.status("[bold green]Generating PDF report...[/bold green]", spinner="dots"):
+            save_pdf(results, output_path=pdf_path, kb_name=kb)
         console.print(f"[green]✓ PDF report saved to:[/green] {pdf_path}\n")
 
 
