@@ -1,0 +1,2 @@
+Changes made to the existing code:
+1. Changing the batch size of the embeddings written into ChromaDB.

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from config import EMBED_MODEL, DEFAULT_TOP_K, CHROMA_BATCH_SIZE
+from config import EMBED_MODEL, DEFAULT_TOP_K
 from knowledge.loader import collect_files, load_document, chunk_text
 
 console = Console()
@@ -65,32 +65,14 @@ def build(kb_paths: list[Path]) -> bool:
     # Store in-memory (no disk, no external server)
     chroma      = chromadb.Client()
     _collection = chroma.create_collection("knowledge_base")
-    # _collection.add(
-    #     ids=ids,
-    #     documents=texts,
-    #     embeddings=embeddings,
-    #     metadatas=metadatas,
-    # )
+    _collection.add(
+        ids=ids,
+        documents=texts,
+        embeddings=embeddings,
+        metadatas=metadatas,
+    )
 
-    console.print(f"  Storing chunks in ChromaDB ...")
-    total   = len(all_chunks)
-    batches = (total + CHROMA_BATCH_SIZE - 1) // CHROMA_BATCH_SIZE   # ceiling division
-
-    for i in range(batches):
-        start = i * CHROMA_BATCH_SIZE
-        end   = min(start + CHROMA_BATCH_SIZE, total)
-
-        _collection.add(
-            ids        = ids[start:end],
-            documents  = texts[start:end],
-            embeddings = embeddings[start:end],
-            metadatas  = metadatas[start:end],
-        )
-        console.print(f"    Batch {i+1}/{batches} — chunks {start+1} to {end} stored")
-
-    console.print(f"\n  [green]✓ Knowledge base ready[/green] — {total} chunks indexed\n")
-
-    # console.print(f"\n  [green]✓ Knowledge base ready[/green] — {len(all_chunks)} chunks indexed\n")
+    console.print(f"\n  [green]✓ Knowledge base ready[/green] — {len(all_chunks)} chunks indexed\n")
     return True
 
 

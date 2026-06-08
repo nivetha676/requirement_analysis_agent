@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 # main.py
 # ─────────────────────────────────────────────────────────────
-# CLI entry point.
-# Run:  python main.py --help
+# CLI entry point for the requirements analysis agent.
+#
+# Build a knowledge base first:
+#   python -m knowledge.builder --name bluetooth --docs ./docs/
+#
+# Then run the agent:
+#   python main.py -f reqs.txt --kb bluetooth
+#   python main.py -f reqs.txt --kb bluetooth --pdf report.pdf
 # ─────────────────────────────────────────────────────────────
 
 import json
@@ -10,11 +16,14 @@ import typer
 from pathlib import Path
 
 from rich.console import Console
+from rich.table import Table
+from rich import box
 
-import knowledge.vector_store as vs
-from analyser  import analyse_all
-from reporter  import print_report
-from config    import DEFAULT_MODEL, DEFAULT_TOP_K
+import knowledge.retriever as retriever
+from analyser      import analyse_all
+from reporter      import print_report
+from pdf_reporter  import save_pdf
+from config        import DEFAULT_MODEL, DEFAULT_TOP_K
 
 app     = typer.Typer(add_completion=False)
 console = Console()
@@ -27,17 +36,21 @@ SAMPLE_REQUIREMENTS = """\
 5. Users should receive a notification when a Bluetooth device is out of range"""
 
 
-# ── CLI command ───────────────────────────────────────────────
+# ── CLI ───────────────────────────────────────────────────────
 
 @app.command()
 def main(
     file: Path = typer.Option(
         None, "--file", "-f",
-        help="Requirements file (.txt) — one requirement per line or numbered.",
+        help="Requirements file (.txt) — one per line or numbered.",
     ),
-    knowledge: list[Path] = typer.Option(
-        [], "--knowledge", "-k",
-        help="Knowledge-base file or directory. Repeatable: -k bt.pdf -k specs/",
+    kb: str = typer.Option(
+        None, "--kb",
+        help="Name of the knowledge base to use (built with knowledge.builder).",
+    ),
+    list_kbs: bool = typer.Option(
+        False, "--list-kb",
+        help="List all available knowledge bases and exit.",
     ),
     model: str = typer.Option(
         DEFAULT_MODEL, "--model", "-m",
@@ -46,6 +59,10 @@ def main(
     output: Path = typer.Option(
         None, "--output", "-o",
         help="Save JSON report to this path.",
+    ),
+    pdf: Path = typer.Option(
+        None, "--pdf", "-p",
+        help="Save PDF report to this path. e.g. --pdf report.pdf",
     ),
     interactive: bool = typer.Option(
         False, "--interactive", "-i",
@@ -60,20 +77,50 @@ def main(
     Analyse software requirements for ambiguity, missing information,
     vague terms, missing acceptance criteria, and edge cases.
 
-    Pass domain documents with -k to unlock domain-aware analysis.
+    Build a knowledge base first:\n
+        python -m knowledge.builder --name bluetooth --docs ./bt_docs/\n
+
+    Then run the agent:\n
+        python main.py -f reqs.txt --kb bluetooth\n
+        python main.py -f reqs.txt --kb bluetooth --pdf report.pdf
     """
 
     console.rule("[bold]Requirements Ambiguity Analysis Agent[/bold]")
 
-    # ── Build knowledge base ──────────────────────────────────
-    if knowledge:
-        ok = vs.build(list(knowledge))
+    # ── List available KBs and exit ───────────────────────────
+    if list_kbs:
+        metas = retriever.list_available()
+        if not metas:
+            console.print(
+                "[dim]No knowledge bases found.[/dim]\n"
+                "[dim]Build one with:[/dim]  python -m knowledge.builder --name <name> --docs <path>"
+            )
+        else:
+            table = Table(box=box.ROUNDED, title="[bold]Available Knowledge Bases[/bold]")
+            table.add_column("Name",        style="bold cyan")
+            table.add_column("Chunks",      justify="right")
+            table.add_column("Sources",     justify="right")
+            table.add_column("Created",     style="dim")
+            for m in metas:
+                table.add_row(
+                    m["name"],
+                    str(m["total_chunks"]),
+                    str(len(m["sources"])),
+                    m["created_at"][:19].replace("T", "  "),
+                )
+            console.print(table)
+        return
+
+    # ── Load knowledge base if specified ──────────────────────
+    if kb:
+        ok = retriever.load(kb)
         if not ok:
-            console.print("[yellow]Continuing without knowledge base.[/yellow]\n")
+            raise typer.Exit(1)
     else:
         console.print(
-            "[dim]No knowledge base provided — running without domain context.[/dim]\n"
-            "[dim]Tip: use -k path/to/spec.pdf for domain-aware analysis.[/dim]\n"
+            "[dim]No knowledge base selected — running without domain context.[/dim]\n"
+            "[dim]Tip: build one with  python -m knowledge.builder --name <name> --docs <path>[/dim]\n"
+            "[dim]     then use it with  --kb <name>[/dim]\n"
         )
 
     # ── Resolve requirements input ────────────────────────────
@@ -103,7 +150,7 @@ def main(
             raise typer.Exit(1)
 
     else:
-        console.print("[dim]No input provided — running with Bluetooth sample requirements.[/dim]\n")
+        console.print("[dim]No input — running with Bluetooth sample requirements.[/dim]\n")
         text = SAMPLE_REQUIREMENTS
 
     # ── Run analysis ──────────────────────────────────────────
@@ -118,14 +165,26 @@ def main(
         console.print("[red]No requirements were successfully analysed.[/red]")
         raise typer.Exit(1)
 
-    # ── Print report ──────────────────────────────────────────
+    # ── Print terminal report ─────────────────────────────────
     print_report(results)
 
     # ── Save JSON ─────────────────────────────────────────────
     if output:
         clean = [{k: v for k, v in r.items() if not k.startswith("_")} for r in results]
         output.write_text(json.dumps(clean, indent=2, ensure_ascii=False), encoding="utf-8")
-        console.print(f"[green]✓ Report saved to:[/green] {output}\n")
+        console.print(f"[green]✓ JSON report saved to:[/green] {output}\n")
+
+    # ── Save PDF ──────────────────────────────────────────────
+    if pdf:
+        # Ensure .pdf extension
+        pdf_path = pdf if pdf.suffix.lower() == ".pdf" else pdf.with_suffix(".pdf")
+        with console.status(f"[bold green]Generating PDF report...[/bold green]", spinner="dots"):
+            save_pdf(
+                results,
+                output_path=pdf_path,
+                kb_name=kb,
+            )
+        console.print(f"[green]✓ PDF report saved to:[/green] {pdf_path}\n")
 
 
 if __name__ == "__main__":
